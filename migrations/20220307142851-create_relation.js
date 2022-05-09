@@ -23,7 +23,7 @@ module.exports = {
         allowNull: false,
       },
       childOf: {
-        type: Sequelize.STRING,
+        type: Sequelize.INTEGER,
       },
       isPartnerOf: {
         type: Sequelize.INTEGER,

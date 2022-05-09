@@ -43,6 +43,10 @@ module.exports = function(sequelize, DataTypes) {
     about: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    birthPlace: {
+      type: DataTypes.TEXT,
+      allowNull: true
     }
   }, {
     sequelize,

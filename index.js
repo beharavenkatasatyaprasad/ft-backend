@@ -1,7 +1,15 @@
 const cors = require('cors');
 const logger = require('morgan');
 const express = require('express');
+require('dotenv').config();
 const app = express();
+const { uploadFile, getFileStream } = require('./s3');
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/' });
+const fs = require('fs');
+const util = require('util');
+const unlinkFile = util.promisify(fs.unlink);
+
 const { relations } = require('./models');
 const { Op } = require('sequelize');
 app.use(logger('dev'));
@@ -70,7 +78,7 @@ const getFamilyOrg = async () => {
   let relsObj = {};
   for (let child_ of rootChildscopy) {
     // let childs_ = await rootChildscopy.filter((a) => a.childOf === child_.id && a.gender === 'male');
-    let childs_ = await rootChildscopy.filter((a) => a.childOf === child_.id );
+    let childs_ = await rootChildscopy.filter((a) => a.childOf === child_.id);
     relsObj[child_.id] = {
       name: child_.name,
       id: child_.id,
@@ -93,9 +101,19 @@ app.get('/family', async (req, res) => {
 });
 
 app.post('/newMember', async (req, res) => {
-  let { fname, lname, childOf, isPartnerOf, gender, birthdate, isRoot, about } = req.body;
+  let { fname, lname, childOf, isPartnerOf, gender, birthdate, isRoot, about, birthPlace } = req.body;
 
-  let newMem = await relations.create({ fname, lname, childOf, isPartnerOf, gender, birthdate, isRoot, about });
+  let newMem = await relations.create({
+    fname,
+    lname,
+    childOf,
+    isPartnerOf,
+    gender,
+    birthdate,
+    isRoot,
+    about,
+    birthPlace,
+  });
 
   if (isPartnerOf) {
     let partner = await relations.findOne({
@@ -206,9 +224,25 @@ app.delete('/:id', async (req, res) => {
   });
 });
 
+app.post('/upload/image/:userId', upload.single('image'), async (req, res) => {
+  const file = req.file;
+  const result = await uploadFile(file);
+  await unlinkFile(file.path);
+  if (req.params.userId !== 'new') {
+    let partner = await relations.findOne({
+      where: {
+        id: req.params.userId,
+      },
+    });
+    partner.photourl = `/images/${result.Key}`;
+    await partner.save();
+  }
+  res.send({ success: true, photourl: `/images/${result.Key}` });
+});
+
 app.post('/:id', async (req, res) => {
   let { id } = req.params;
-  let { fname, lname, childOf, isPartnerOf, gender, birthdate, about } = req.body;
+  let { fname, lname, childOf, isPartnerOf, gender, birthdate, about, birthPlace } = req.body;
 
   let partner = await relations.findOne({
     where: {
@@ -223,12 +257,21 @@ app.post('/:id', async (req, res) => {
   if (gender) partner.gender = gender;
   if (birthdate) partner.birthdate = birthdate;
   if (about) partner.about = about;
+  if (birthPlace) partner.birthPlace = birthPlace;
 
   await partner.save();
 
   res.json({
     success: true,
   });
+});
+
+app.get('/images/:key', (req, res) => {
+  console.log(req.params);
+  const key = req.params.key;
+  const readStream = getFileStream(key);
+
+  readStream.pipe(res);
 });
 
 const port = process.env.PORT || 8000;
